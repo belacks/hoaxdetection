@@ -175,11 +175,36 @@ def download_file_from_google_drive(file_id, destination):
     Download file dari Google Drive menggunakan gdown
     """
     try:
-        url = f'https://drive.google.com/uc?id={file_id}'
-        gdown.download(url, destination, quiet=False)
-        return True
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        
+        # Force download mode with direct URL format
+        url = f'https://drive.google.com/uc?id={file_id}&export=download'
+        st.write(f"Trying to download from: {url}")
+        
+        # Try with gdown
+        try:
+            gdown.download(url, destination, quiet=False)
+            if os.path.exists(destination) and os.path.getsize(destination) > 0:
+                return True
+            else:
+                st.error("Download completed but file is empty or doesn't exist")
+        except Exception as e:
+            st.error(f"gdown error: {e}")
+            
+            # Fallback: Try direct requests download
+            st.write("Trying alternative download method...")
+            response = requests.get(url)
+            if response.status_code == 200:
+                with open(destination, 'wb') as f:
+                    f.write(response.content)
+                return True
+            else:
+                st.error(f"Failed with status code: {response.status_code}")
+                
+        return False
     except Exception as e:
-        st.error(f"Error mengunduh file: {e}")
+        st.error(f"Error downloading file: {e}")
         return False
 
 # Fungsi untuk mendapatkan ID file dari link Google Drive
