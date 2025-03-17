@@ -1,13 +1,3 @@
-#!pip install Sastrawi
-#!pip install streamlit
-#!pip install tensorflow
-#!pip install lightgbm
-#!pip install shap
-#!pip install ipywidgets
-
-# Hoax Detection System for Indonesian Social Media Content
-# Implementation based on sentiment analysis, ensemble models, and SHAP explanations
-
 # Import required libraries
 import pandas as pd
 import numpy as np
@@ -20,7 +10,6 @@ import string
 import time
 import warnings
 import joblib
-from tqdm.notebook import tqdm
 from collections import Counter
 from typing import List, Dict, Tuple, Union, Any
 import tensorflow as tf
@@ -51,13 +40,21 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
 import lightgbm as lgbm
-from imblearn.over_sampling import SMOTE, ADASYN
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.combine import SMOTETomek, SMOTEENN
-from imblearn.pipeline import Pipeline
+
+# Commenting out imbalanced-learn imports due to compatibility issues
+# Will handle class imbalance using class_weight instead
+# from imblearn.over_sampling import SMOTE, ADASYN
+# from imblearn.under_sampling import RandomUnderSampler
+# from imblearn.combine import SMOTETomek, SMOTEENN
+# from imblearn.pipeline import Pipeline
 
 # For SHAP explanations
 import shap
+
+# Download necessary NLTK resources properly
+nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
+nltk.download('stopwords', quiet=True)
 
 # For embedding visualization
 from sklearn.manifold import TSNE
@@ -71,14 +68,6 @@ tf.random.set_seed(42)
 # Check for GPU availability
 print("TensorFlow version:", tf.__version__)
 print("GPU Available:", tf.config.list_physical_devices('GPU'))
-
-# Download necessary NLTK resources
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('punkt')
-    nltk.download('stopwords')
 
 # Create stemmer and stopwords for Indonesian
 factory = StemmerFactory()
