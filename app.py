@@ -44,7 +44,10 @@ import shutil
 
 # Untuk menangani Google Drive
 import requests
-import gdown
+try:
+    import gdown
+except:
+    st.error("Error importing gdown!")
 
 # Inisialisasi NLTK resources saat startup
 import nltk
