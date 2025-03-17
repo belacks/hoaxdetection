@@ -225,10 +225,30 @@ def get_file_id_from_gdrive_link(link):
 def load_model(model_path):
     """Memuat model deteksi hoaks dari file"""
     try:
-        model = HoaxDetectionSystem.load_model(model_path)
-        return model
+        # Check if file exists and has content
+        if not os.path.exists(model_path):
+            st.error(f"File tidak ditemukan: {model_path}")
+            return None
+            
+        if os.path.getsize(model_path) == 0:
+            st.error(f"File kosong: {model_path}")
+            return None
+            
+        st.success(f"Model ditemukan di: {model_path} dengan ukuran {os.path.getsize(model_path)} bytes")
+        
+        try:
+            # Try to load with pickle
+            model = HoaxDetectionSystem.load_model(model_path)
+            return model
+        except Exception as e:
+            st.error(f"Error saat memuat dengan pickle: {e}")
+            
+            # Fallback to creating a dummy model
+            st.warning("Menggunakan model dummy untuk demonstrasi")
+            return HoaxDetectionSystem()
+            
     except Exception as e:
-        st.error(f"Error memuat model: {e}")
+        st.error(f"Error umum saat memuat model: {e}")
         return None
 
 # Fungsi untuk membuat visualisasi pengaruh fitur
@@ -893,6 +913,7 @@ def model_page():
     Halaman ini memungkinkan Anda untuk memuat model deteksi hoaks dari berbagai sumber.
     Anda dapat menggunakan model yang telah dilatih sebelumnya atau mengunggah model baru.
     """)
+
     
     # Tabs for different model sources
     model_tabs = st.tabs(["Google Drive", "Upload File"])
