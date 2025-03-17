@@ -3,8 +3,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    st.error("Error importing matplotlib. Please check requirements.")
+
+try:
+    import seaborn as sns
+except ImportError:
+    st.error("Error importing seaborn. Please check requirements.")
 import pickle
 import os
 import re
@@ -25,6 +32,22 @@ import shutil
 # Untuk menangani Google Drive
 import requests
 import gdown
+
+# Inisialisasi NLTK resources saat startup
+import nltk
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+import nltk
+try:
+    nltk.data.find('tokenizers/punkt_tab')
+except LookupError:
+    nltk.download('punkt_tab')
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
 
 # Impor komponen sistem deteksi hoaks
 # Catatan: Pastikan semua file implementasi sudah tersedia
