@@ -50,20 +50,24 @@ except:
     st.error("Error importing gdown!")
 
 # Inisialisasi NLTK resources saat startup
-import nltk
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-import nltk
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    nltk.download('punkt_tab')
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
+# Use this:
+import os
+nltk_data_dir = os.path.join(os.path.expanduser('~'), 'nltk_data')
+os.makedirs(nltk_data_dir, exist_ok=True)
+
+# Function to safely download NLTK resources
+def download_nltk_resource(resource_name):
+    try:
+        nltk.data.find(f'{resource_name}')
+        print(f"Resource {resource_name} already exists.")
+    except LookupError:
+        print(f"Downloading {resource_name}...")
+        nltk.download(resource_name, quiet=True)
+
+# Download required resources
+download_nltk_resource('tokenizers/punkt')
+download_nltk_resource('tokenizers/punkt_tab')
+download_nltk_resource('corpora/stopwords')
 
 # Impor komponen sistem deteksi hoaks
 # Catatan: Pastikan semua file implementasi sudah tersedia
