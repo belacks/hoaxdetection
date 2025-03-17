@@ -1,9 +1,9 @@
-!pip install Sastrawi
-!pip install streamlit
-!pip install tensorflow
-!pip install lightgbm
-!pip install shap
-!pip install ipywidgets
+#!pip install Sastrawi
+#!pip install streamlit
+#!pip install tensorflow
+#!pip install lightgbm
+#!pip install shap
+#!pip install ipywidgets
 
 # Hoax Detection System for Indonesian Social Media Content
 # Implementation based on sentiment analysis, ensemble models, and SHAP explanations
