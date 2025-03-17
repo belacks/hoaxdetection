@@ -173,10 +173,10 @@ def get_file_id_from_gdrive_link(link):
     """Ekstrak file ID dari link Google Drive"""
     if '/file/d/' in link:
         # Format link: https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing
-        file_id = link.split('/file/d/')[1].split('/')[0]
+        file_id = link.split('/file/d/1AU_-uQwka_L9f62qyzPuV8vFO6spblV1')[1].split('/')[0]
     elif 'id=' in link:
         # Format link: https://drive.google.com/open?id={FILE_ID}
-        file_id = link.split('id=')[1].split('&')[0]
+        file_id = link.split('id=1AU_-uQwka_L9f62qyzPuV8vFO6spblV1')[1].split('&')[0]
     else:
         return None
     return file_id
