@@ -3,15 +3,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    st.error("Error importing matplotlib. Please check requirements.")
-
-try:
-    import seaborn as sns
-except ImportError:
-    st.error("Error importing seaborn. Please check requirements.")
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pickle
 import os
 import re
@@ -23,21 +16,8 @@ import urllib.parse
 import base64
 from datetime import datetime
 import warnings
-try:
-    import plotly.express as px
-    import plotly.graph_objects as go
-except ImportError:
-    st.error("Error importing plotly. Using alternative visualization.")
-
-    # Alternatif menggunakan altair yang sudah ada di Streamlit
-    import altair as alt
-    
-    # Fungsi untuk mengganti penggunaan plotly dengan altair
-    def create_alternative_chart(data, x, y, title):
-        return alt.Chart(data).mark_bar().encode(
-            x=x,
-            y=y
-        ).properties(title=title)
+import plotly.express as px
+import plotly.graph_objects as go
 from PIL import Image
 import tempfile
 import shutil
@@ -52,24 +32,14 @@ except:
 # Inisialisasi NLTK resources saat startup
 # Use this:
 import nltk
-import os
-nltk_data_dir = os.path.join(os.path.expanduser('~'), 'nltk_data')
-os.makedirs(nltk_data_dir, exist_ok=True)
-
-# Function to safely download NLTK resources
-def download_nltk_resource(resource_name):
-    try:
-        nltk.data.find(f'{resource_name}')
-        print(f"Resource {resource_name} already exists.")
-    except LookupError:
-        print(f"Downloading {resource_name}...")
-        nltk.download(resource_name, quiet=True)
-
-# Download required resources
-download_nltk_resource('tokenizers/punkt')
-download_nltk_resource('tokenizers/punkt_tab')
-download_nltk_resource('corpora/stopwords')
-
+try:
+    nltk.download('punkt', quiet=True)
+    nltk.download('punkt_tab', quiet=True)
+    nltk.download('stopwords', quiet=True)
+    print("NLTK resources downloaded successfully")
+except Exception as e:
+    print(f"Error downloading NLTK resources: {e}")
+    
 # Impor komponen sistem deteksi hoaks
 # Catatan: Pastikan semua file implementasi sudah tersedia
 from hoax_detection_system import HoaxDetectionSystem, IndonesianTextPreprocessor, SentimentFeatureExtractor
