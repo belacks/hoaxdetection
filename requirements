@@ -10,6 +10,7 @@ nltk==3.8.1
 Sastrawi==1.0.1
 shap==0.41.0
 plotly==5.15.0
+plotly-express==0.4.1
 pillow==9.5.0
 gdown==4.7.1
 requests==2.31.0
