@@ -23,8 +23,21 @@ import urllib.parse
 import base64
 from datetime import datetime
 import warnings
-import plotly.express as px
-import plotly.graph_objects as go
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+except ImportError:
+    st.error("Error importing plotly. Using alternative visualization.")
+
+    # Alternatif menggunakan altair yang sudah ada di Streamlit
+    import altair as alt
+    
+    # Fungsi untuk mengganti penggunaan plotly dengan altair
+    def create_alternative_chart(data, x, y, title):
+        return alt.Chart(data).mark_bar().encode(
+            x=x,
+            y=y
+        ).properties(title=title)
 from PIL import Image
 import tempfile
 import shutil
