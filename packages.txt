@@ -1,3 +1,2 @@
-libgl1-mesa-glx
-libgomp1
 build-essential
+libgomp1
