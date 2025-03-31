@@ -7,14 +7,12 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import nltk
 from nltk.tokenize import word_tokenize
 import pickle
 import requests
 import io
 import gdown
-import shap
 
 # Set page configuration
 st.set_page_config(
@@ -72,13 +70,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize NLTK resources
-@st.cache_resource
-def initialize_nltk():
-    nltk.download('punkt', quiet=True)
-    nltk.download('punkt_tab', quiet=True)
-    nltk.download('stopwords', quiet=True)
+# Create cache directory if it doesn't exist
+if not os.path.exists('nltk_data'):
+    os.makedirs('nltk_data')
 
+# Download NLTK data
+@st.cache_resource
+def download_nltk_data():
+    try:
+        nltk.data.path.append('nltk_data')
+        nltk.download('punkt', download_dir='nltk_data', quiet=True)
+    except Exception as e:
+        st.warning(f"NLTK data download warning: {str(e)}")
 
 # Define the required classes for the model
 class IndonesianTextPreprocessor:
@@ -353,7 +356,7 @@ class HoaxDetectionSystem:
         return y_pred
 
     def explain_prediction(self, text_judul, text_narasi, num_features=10):
-        """Explain the prediction using SHAP"""
+        """Explain the prediction"""
         if not self.is_trained:
             raise ValueError("Model must be trained first")
 
@@ -388,21 +391,34 @@ class HoaxDetectionSystem:
         except Exception as e:
             st.warning(f"TF-IDF explanation error: {str(e)}")
 
-        # Try SHAP explanation
+        # Use feature importance from the model if available
         try:
-            explainer = shap.Explainer(self.best_model.predict_proba, X)
-            shap_values = explainer(X)
-            
-            # Get important features by SHAP value
-            shap_df = pd.DataFrame(shap_values.values[0], index=X.columns, columns=["shap_value"])
-            shap_df["abs"] = shap_df["shap_value"].abs()
-            top_features = shap_df.sort_values("abs", ascending=False).head(num_features)
-
-            for idx, row in top_features.iterrows():
-                explanation.append({'feature': idx, 'shap_value': row['shap_value'],
-                                  'direction': 'positive' if row['shap_value']>0 else 'negative'})
+            # Try to get feature importance
+            if hasattr(self.best_model, 'feature_importances_'):
+                importances = self.best_model.feature_importances_
+                feature_imp = pd.DataFrame({'feature': X.columns, 'importance': importances})
+                feature_imp = feature_imp.sort_values('importance', ascending=False).head(num_features)
+                
+                for _, row in feature_imp.iterrows():
+                    explanation.append({
+                        'feature': row['feature'], 
+                        'shap_value': float(row['importance']),
+                        'direction': 'positive' if prediction==1 else 'negative'
+                    })
+            # For models like logistic regression
+            elif hasattr(self.best_model, 'coef_'):
+                importances = self.best_model.coef_[0]
+                feature_imp = pd.DataFrame({'feature': X.columns, 'importance': importances})
+                feature_imp = feature_imp.sort_values('importance', ascending=False).head(num_features)
+                
+                for _, row in feature_imp.iterrows():
+                    explanation.append({
+                        'feature': row['feature'], 
+                        'shap_value': float(row['importance']),
+                        'direction': 'positive' if row['importance'] > 0 else 'negative'
+                    })
         except Exception as e:
-            st.warning(f"SHAP explanation error: {str(e)}")
+            st.warning(f"Feature importance extraction error: {str(e)}")
 
         # Sort and limit by importance
         explanation = sorted(explanation, key=lambda x: abs(x['shap_value']), reverse=True)[:num_features]
@@ -453,15 +469,93 @@ def load_model(model_path):
         st.error(f"Error loading model: {str(e)}")
         return None
 
+# Function to test the app without model
+def demo_prediction(judul, narasi, threshold=0.5):
+    """Demo prediction function that works without the model"""
+    # This is a placeholder function to simulate predictions without the actual model
+    import random
+    
+    # Analyze text characteristics to make educated mock prediction
+    contains_clickbait = any(word in judul.lower() for word in [
+        'viral', 'mengejutkan', 'wow', 'tidak percaya', 'rahasia', 'terbongkar', 'gila'
+    ])
+    
+    contains_credibility_markers = any(word in narasi.lower() for word in [
+        'fakta', 'penelitian', 'menurut', 'sumber', 'terbukti', 'resmi'
+    ])
+    
+    # Set base probability based on content characteristics
+    if contains_clickbait and not contains_credibility_markers:
+        base_prob = 0.7  # More likely to be hoax
+    elif contains_credibility_markers and not contains_clickbait:
+        base_prob = 0.3  # Less likely to be hoax
+    else:
+        base_prob = 0.5  # Neutral
+    
+    # Add some randomness
+    prob = min(0.95, max(0.05, base_prob + random.uniform(-0.2, 0.2)))
+    
+    # Classification based on threshold
+    is_hoax = prob >= threshold
+    
+    # Create explanation features
+    explanation = []
+    
+    # Add clickbait features if relevant
+    if contains_clickbait:
+        clickbait_words = ['viral', 'mengejutkan', 'wow', 'tidak percaya', 'rahasia', 'terbongkar', 'gila']
+        for word in clickbait_words:
+            if word in judul.lower():
+                explanation.append({
+                    'feature': f'judul_clickbait_{word}',
+                    'shap_value': round(random.uniform(0.4, 0.8), 4),
+                    'direction': 'positive'
+                })
+    
+    # Add credibility features if relevant
+    if contains_credibility_markers:
+        credibility_words = ['fakta', 'penelitian', 'menurut', 'sumber', 'terbukti', 'resmi']
+        for word in credibility_words:
+            if word in narasi.lower():
+                explanation.append({
+                    'feature': f'narasi_credibility_{word}',
+                    'shap_value': round(random.uniform(0.3, 0.7), 4),
+                    'direction': 'negative'
+                })
+    
+    # Add linguistic features
+    explanation.append({
+        'feature': 'narasi_word_count',
+        'shap_value': round(random.uniform(0.2, 0.6), 4),
+        'direction': 'negative' if len(narasi.split()) > 30 else 'positive'
+    })
+    
+    explanation.append({
+        'feature': 'judul_exclamation_count',
+        'shap_value': round(random.uniform(0.3, 0.7), 4),
+        'direction': 'positive' if judul.count('!') > 0 else 'negative'
+    })
+    
+    # Sort and limit features
+    explanation = sorted(explanation, key=lambda x: abs(x['shap_value']), reverse=True)[:10]
+    
+    return {
+        'prediction': int(is_hoax),
+        'predicted_class': 'Hoax' if is_hoax else 'Non-Hoax',
+        'probability': prob,
+        'confidence': prob if is_hoax else 1-prob,
+        'explanation': explanation
+    }
+
 # Main function for Streamlit app
 def main():
-    # Initialize NLTK resources
-    initialize_nltk()
+    # Download NLTK data
+    download_nltk_data()
     
     # Display header
     st.markdown('<h1 class="main-header">🔍 Indonesian Hoax Detection System</h1>', unsafe_allow_html=True)
     st.markdown("""
-    <p style="text-align:center;">Sistem deteksi hoaks berbasis analisis sentimen menggunakan metode ensemble dan interpretasi SHAP</p>
+    <p style="text-align:center;">Sistem deteksi hoaks berbasis analisis sentimen menggunakan metode ensemble</p>
     """, unsafe_allow_html=True)
     
     # Create sidebar
@@ -470,14 +564,20 @@ def main():
     # Model loading options
     model_load_option = st.sidebar.radio(
         "Choose how to load the model:",
-        ["Upload Model", "Use Google Drive Link", "Use Local Path"]
+        ["Demo Mode (No Model)", "Upload Model", "Use Google Drive Link", "Use Local Path"]
     )
     
     detector = None
     model_loaded = False
+    demo_mode = False
     
     # Handle model loading based on option
-    if model_load_option == "Upload Model":
+    if model_load_option == "Demo Mode (No Model)":
+        st.sidebar.info("Running in demo mode. Predictions are simulated.")
+        demo_mode = True
+        model_loaded = True  # Consider it "loaded" for flow control
+    
+    elif model_load_option == "Upload Model":
         st.sidebar.warning("Note: Due to the 400MB model size, direct upload may be slow or time out.")
         uploaded_model = st.sidebar.file_uploader("Upload your trained model file (.pkl or .joblib)", type=["pkl", "joblib"])
         
@@ -516,7 +616,7 @@ def main():
     
     # Main content
     if not model_loaded:
-        st.info("Please load a model to begin detecting hoaxes")
+        st.info("Please load a model or use demo mode to begin detecting hoaxes")
         
         # Display placeholder examples while waiting for model
         st.markdown('<h2 class="sub-header">Example Input</h2>', unsafe_allow_html=True)
@@ -549,7 +649,7 @@ def main():
             """)
     
     else:
-        # Model is loaded, show the main interface
+        # Model is loaded or demo mode is active
         st.markdown('<h2 class="sub-header">Input News to Detect</h2>', unsafe_allow_html=True)
         
         # Input form
@@ -569,101 +669,81 @@ def main():
         if submitted:
             # Display loading spinner
             with st.spinner("Analyzing content for hoax indicators..."):
-                # Create input DataFrame
-                input_df = pd.DataFrame({'judul': [judul], 'narasi': [narasi]})
-                
-                # Make prediction
-                pred, prob = detector.predict(input_df, return_proba=True, threshold=threshold)
-                
-                if pred is not None:
-                    is_hoax = bool(pred[0])
-                    confidence = prob[0] if is_hoax else 1-prob[0]
-                    
-                    # Get explanation
-                    explanation = detector.explain_prediction(judul, narasi)
-                    
-                    # Display results
-                    result_class = "hoax-result" if is_hoax else "non-hoax-result"
-                    st.markdown(f'<div class="result-box {result_class}">', unsafe_allow_html=True)
-                    
-                    st.markdown(f"### Prediction: {'HOAX' if is_hoax else 'NOT HOAX'}")
-                    st.markdown(f"**Confidence:** {confidence:.2%}")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Show explanation
-                    if explanation and 'explanation' in explanation:
-                        st.markdown('<h2 class="sub-header">Explanation</h2>', unsafe_allow_html=True)
-                        
-                        st.markdown('<p class="explanation-header">Features influencing the prediction:</p>', 
-                                   unsafe_allow_html=True)
-                        
-                        # Create a dataframe for the explanation
-                        exp_data = []
-                        for feat in explanation['explanation']:
-                            exp_data.append({
-                                'Feature': feat['feature'],
-                                'Impact': feat['shap_value'],
-                                'Direction': feat['direction']
-                            })
-                        
-                        exp_df = pd.DataFrame(exp_data)
-                        st.dataframe(exp_df)
-                        
-                        # Plot feature importance
-                        st.markdown('<p class="explanation-header">Feature Impact Visualization:</p>', 
-                                   unsafe_allow_html=True)
-                        
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        factors = [(x['feature'], x['shap_value']) for x in explanation['explanation']]
-                        factors.sort(key=lambda x: x[1])  # Sort by impact
-                        
-                        features, values = zip(*factors)
-                        colors = ['red' if v < 0 else 'green' for v in values]
-                        
-                        ax.barh(features, values, color=colors)
-                        ax.set_xlabel('Impact on prediction')
-                        ax.set_title(f"Key factors in predicting {'HOAX' if is_hoax else 'NOT HOAX'}")
-                        ax.grid(axis='x', linestyle='--', alpha=0.7)
-                        
-                        st.pyplot(fig)
-                        
-                        # Explain the features
-                        st.markdown('<p class="explanation-header">What does this mean?</p>', 
-                                   unsafe_allow_html=True)
-                        
-                        st.markdown("""
-                        - **Green bars** show features pushing toward "Not Hoax"
-                        - **Red bars** show features pushing toward "Hoax"
-                        - Longer bars have more influence on the prediction
-                        """)
-                        
-                        # Word cloud of important words if many words are involved
-                        word_features = [f for f in features if '_tfidf_' in str(f) or any(word in str(f) for word in ['judul_', 'narasi_'])]
-                        
-                        if len(word_features) > 3:
-                            st.markdown('<p class="explanation-header">Important Words Analysis:</p>', 
-                                       unsafe_allow_html=True)
-                            
-                            # Show summary of important words
-                            word_summary = {}
-                            for feat, val in zip(features, values):
-                                if '_tfidf_' in str(feat) or any(word in str(feat) for word in ['judul_', 'narasi_']):
-                                    word = str(feat).split('_')[-1]
-                                    if word not in word_summary:
-                                        word_summary[word] = 0
-                                    word_summary[word] += abs(val)
-                            
-                            # Convert to dataframe
-                            word_df = pd.DataFrame([
-                                {'Word': word, 'Importance': score}
-                                for word, score in word_summary.items()
-                            ]).sort_values('Importance', ascending=False).head(10)
-                            
-                            st.dataframe(word_df)
-                
+                if demo_mode:
+                    # Use demo prediction function
+                    explanation = demo_prediction(judul, narasi, threshold)
                 else:
-                    st.error("Error occurred during prediction. Please try again or check model compatibility.")
+                    # Create input DataFrame
+                    input_df = pd.DataFrame({'judul': [judul], 'narasi': [narasi]})
+                    
+                    # Make prediction
+                    pred, prob = detector.predict(input_df, return_proba=True, threshold=threshold)
+                    
+                    if pred is not None:
+                        # Get explanation
+                        explanation = detector.explain_prediction(judul, narasi)
+                    else:
+                        st.error("Error occurred during prediction. Using fallback demo mode.")
+                        explanation = demo_prediction(judul, narasi, threshold)
+                
+                # Display results
+                is_hoax = explanation['prediction'] == 1
+                confidence = explanation['confidence']
+                
+                result_class = "hoax-result" if is_hoax else "non-hoax-result"
+                st.markdown(f'<div class="result-box {result_class}">', unsafe_allow_html=True)
+                
+                st.markdown(f"### Prediction: {'HOAX' if is_hoax else 'NOT HOAX'}")
+                st.markdown(f"**Confidence:** {confidence:.2%}")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Show explanation
+                if explanation and 'explanation' in explanation:
+                    st.markdown('<h2 class="sub-header">Explanation</h2>', unsafe_allow_html=True)
+                    
+                    st.markdown('<p class="explanation-header">Features influencing the prediction:</p>', 
+                               unsafe_allow_html=True)
+                    
+                    # Create a dataframe for the explanation
+                    exp_data = []
+                    for feat in explanation['explanation']:
+                        exp_data.append({
+                            'Feature': feat['feature'],
+                            'Impact': feat['shap_value'],
+                            'Direction': feat['direction']
+                        })
+                    
+                    exp_df = pd.DataFrame(exp_data)
+                    st.dataframe(exp_df)
+                    
+                    # Plot feature importance
+                    st.markdown('<p class="explanation-header">Feature Impact Visualization:</p>', 
+                               unsafe_allow_html=True)
+                    
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    factors = [(x['feature'], x['shap_value']) for x in explanation['explanation']]
+                    factors.sort(key=lambda x: x[1])  # Sort by impact
+                    
+                    features, values = zip(*factors)
+                    colors = ['red' if v < 0 else 'green' for v in values]
+                    
+                    ax.barh(features, values, color=colors)
+                    ax.set_xlabel('Impact on prediction')
+                    ax.set_title(f"Key factors in predicting {'HOAX' if is_hoax else 'NOT HOAX'}")
+                    ax.grid(axis='x', linestyle='--', alpha=0.7)
+                    
+                    st.pyplot(fig)
+                    
+                    # Explain the features
+                    st.markdown('<p class="explanation-header">What does this mean?</p>', 
+                               unsafe_allow_html=True)
+                    
+                    st.markdown("""
+                    - **Green bars** show features pushing toward "Not Hoax"
+                    - **Red bars** show features pushing toward "Hoax"
+                    - Longer bars have more influence on the prediction
+                    """)
     
     # Footer
     st.markdown('<div class="footer">Indonesian Hoax Detection System &copy; 2025</div>', 
