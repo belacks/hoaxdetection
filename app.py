@@ -44,6 +44,7 @@ if 'model_components' not in st.session_state:
 def download_nltk_resources():
     try:
         nltk.download('punkt', quiet=True)
+        nltk.download('punkt_tab', quiet=True)
         nltk.download('stopwords', quiet=True)
         return True
     except Exception as e:
