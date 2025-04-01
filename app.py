@@ -31,6 +31,7 @@ st.title("🔍 Indonesian Hoax Detection System")
 st.markdown("""
     This application uses machine learning to detect hoaxes in Indonesian news articles.
     Enter a headline and narrative text to check whether it's likely to be a hoax.
+    Here's the ID of the model's Google Drive upload: 1vOZVGViZSav67ZvdO3NzJ3PlKNYf0oEa
 """)
 
 # Initialize session state
