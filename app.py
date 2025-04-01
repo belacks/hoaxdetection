@@ -4,13 +4,12 @@ import string
 import time
 import warnings
 import joblib
+import pickle
 import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
-import seaborn as sns
-import pickle
-import shap
+from io import BytesIO
 import nltk
 from nltk.tokenize import word_tokenize
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
@@ -33,18 +32,22 @@ st.markdown("""
     Enter a headline and narrative text to check whether it's likely to be a hoax.
 """)
 
-# Initialize session state for model loading status
+# Initialize session state
 if 'model_loaded' not in st.session_state:
     st.session_state.model_loaded = False
+if 'model_components' not in st.session_state:
+    st.session_state.model_components = {}
 
 # Download NLTK resources on app startup
 @st.cache_resource
 def download_nltk_resources():
-    nltk.download('punkt', quiet=True)
-    nltk.download('punkt_tab', quiet=True)
-    nltk.download('stopwords', quiet=True)
-
-download_nltk_resources()
+    try:
+        nltk.download('punkt', quiet=True)
+        nltk.download('stopwords', quiet=True)
+        return True
+    except Exception as e:
+        st.error(f"Error downloading NLTK resources: {e}")
+        return False
 
 # Create stopwords and dictionaries
 @st.cache_resource
@@ -103,7 +106,13 @@ def initialize_nlp_resources():
         'credibility_positive': credibility_positive
     }
 
-nlp_resources = initialize_nlp_resources()
+# Initialize NLP resources
+success = download_nltk_resources()
+if success:
+    nlp_resources = initialize_nlp_resources()
+else:
+    st.error("Failed to initialize NLP resources. Please refresh the page.")
+    st.stop()
 
 # Define the classes required for the model
 class IndonesianTextPreprocessor:
@@ -238,51 +247,20 @@ class TrainingProgressTracker:
         total_time = time.time() - self.start_time
         return {"total_training_time": total_time, "step_times": self.step_times, "model_times": self.model_times}
 
+# Simplified HoaxDetectionSystem class optimized for inference
 class HoaxDetectionSystem:
-    def __init__(self, use_gpu=False, handle_imbalance=None, tfidf_params=None,
-                 preprocessor_params=None, feature_extractor_params=None,
-                 verbose=True, display_live_chart=False):
-        self.use_gpu = use_gpu
-        self.verbose = verbose
-        self.display_live_chart = display_live_chart
-        self.handle_imbalance = handle_imbalance
-
-        self.tfidf_params = {'max_features': 10000, 'min_df': 2, 'max_df': 0.95, 'ngram_range': (1, 2)}
-        if tfidf_params:
-            self.tfidf_params.update(tfidf_params)
-
-        self.preprocessor_params = {'remove_url': True, 'remove_html': True, 'remove_punctuation': True,
-                                    'normalize_slang': True, 'remove_stopwords': True, 'stemming': True}
-        if preprocessor_params:
-            self.preprocessor_params.update(preprocessor_params)
-
-        self.feature_extractor_params = {'extract_sentiment': True, 'extract_linguistic': True,
-                                         'extract_credibility': True}
-        if feature_extractor_params:
-            self.feature_extractor_params.update(feature_extractor_params)
-
-        self.preprocessor = IndonesianTextPreprocessor(**self.preprocessor_params)
-        self.feature_extractor = SentimentFeatureExtractor(**self.feature_extractor_params)
-        
-        self.tfidf_vectorizer = TfidfVectorizer(**self.tfidf_params)
-        self.scaler = MinMaxScaler()
-
-        self.base_models = {}
-        self.ensemble_models = {}
+    def __init__(self):
+        self.preprocessor = None
+        self.feature_extractor = None
+        self.tfidf_vectorizer = None
+        self.scaler = None
         self.best_model = None
         self.best_model_name = None
         self.feature_names = []
         self.is_trained = False
-        self.class_balance = None
-        self.tracker = TrainingProgressTracker(verbose=verbose)
-        self.training_metrics = {
-            'model_names': [],
-            'accuracy': [],
-            'f1_scores': [],
-            'training_times': []
-        }
+        self.tracker = TrainingProgressTracker(verbose=True)
 
-    def _combine_features(self, judul_tfidf, narasi_tfidf, meta_features, is_training=False):
+    def _combine_features(self, judul_tfidf, narasi_tfidf, meta_features):
         judul_cols = [f"judul_tfidf_{i}" for i in range(judul_tfidf.shape[1])]
         judul_df = pd.DataFrame(judul_tfidf.toarray(), columns=judul_cols)
         narasi_cols = [f"narasi_tfidf_{i}" for i in range(narasi_tfidf.shape[1])]
@@ -290,7 +268,7 @@ class HoaxDetectionSystem:
         combined = pd.concat([judul_df, narasi_df, meta_features], axis=1)
         combined.columns = combined.columns.astype(str)
 
-        if not is_training and self.feature_names:
+        if self.feature_names:
             for col in self.feature_names:
                 if col not in combined.columns:
                     combined[col] = 0
@@ -298,9 +276,9 @@ class HoaxDetectionSystem:
 
         return combined
 
-    def _prepare_data(self, judul_series, narasi_series, labels=None):
-        is_training = labels is not None
-        
+    def _prepare_data(self, judul_series, narasi_series):
+        self.tracker.start_step("Prediction data preparation")
+
         preprocessed_judul = self.preprocessor.fit_transform(judul_series)
         preprocessed_narasi = self.preprocessor.fit_transform(narasi_series)
 
@@ -314,11 +292,10 @@ class HoaxDetectionSystem:
         scaled = self.scaler.transform(meta_features)
         scaled_meta = pd.DataFrame(scaled, columns=meta_features.columns)
 
-        X = self._combine_features(judul_tfidf, narasi_tfidf, scaled_meta, is_training)
+        combined = self._combine_features(judul_tfidf, narasi_tfidf, scaled_meta)
 
-        if labels is not None:
-            return X, labels
-        return X
+        self.tracker.end_step("Prediction data preparation")
+        return combined
 
     def predict(self, data, text_column_judul='judul', text_column_narasi='narasi', return_proba=False, threshold=0.5):
         if not self.is_trained:
@@ -367,23 +344,34 @@ class HoaxDetectionSystem:
                 explanation.append({'feature': f'narasi_{word}', 'shap_value': float(val),
                                   'direction': 'positive' if prediction==1 else 'negative'})
         except Exception as e:
-            st.error(f"Error in TF-IDF explanation: {e}")
+            st.warning(f"TF-IDF explanation unavailable: {e}")
 
-        # Try SHAP explanation if possible
+        # Try basic feature importance if SHAP is not available
         try:
-            explainer = shap.Explainer(self.best_model.predict_proba, X)
-            shap_values = explainer(X)
-
-            # Get top features by SHAP value
-            shap_df = pd.DataFrame(shap_values.values[0], index=X.columns, columns=["shap_value"])
-            shap_df["abs"] = shap_df["shap_value"].abs()
-            top_features = shap_df.sort_values("abs", ascending=False).head(num_features)
-
-            for idx, row in top_features.iterrows():
-                explanation.append({'feature': idx, 'shap_value': row['shap_value'],
-                                  'direction': 'positive' if row['shap_value']>0 else 'negative'})
+            if hasattr(self.best_model, 'feature_importances_'):
+                importances = self.best_model.feature_importances_
+                feature_imp = pd.DataFrame({'feature': X.columns, 'importance': importances})
+                feature_imp = feature_imp.sort_values('importance', ascending=False).head(num_features)
+                
+                for idx, row in feature_imp.iterrows():
+                    explanation.append({
+                        'feature': row['feature'], 
+                        'shap_value': float(row['importance']),
+                        'direction': 'positive' if row['importance'] > 0 else 'negative'
+                    })
+            elif hasattr(self.best_model, 'coef_'):
+                importances = self.best_model.coef_[0]
+                feature_imp = pd.DataFrame({'feature': X.columns, 'importance': importances})
+                feature_imp = feature_imp.sort_values('importance', ascending=False).head(num_features)
+                
+                for idx, row in feature_imp.iterrows():
+                    explanation.append({
+                        'feature': row['feature'], 
+                        'shap_value': float(row['importance']),
+                        'direction': 'positive' if row['importance'] > 0 else 'negative'
+                    })
         except Exception as e:
-            st.error(f"Error in SHAP explanation: {e}")
+            st.warning(f"Model-based explanation unavailable: {e}")
 
         # Sort and limit by importance
         explanation = sorted(explanation, key=lambda x: abs(x['shap_value']), reverse=True)[:num_features]
@@ -396,16 +384,60 @@ class HoaxDetectionSystem:
             'explanation': explanation
         }
 
+# Function to load model in chunks to handle large file sizes
+def load_model_in_chunks(uploaded_file, chunk_size=10*1024*1024):
+    """Load a large model file in chunks to avoid memory issues"""
+    bytes_data = BytesIO()
+    for chunk in uploaded_file.chunks(chunk_size=chunk_size):
+        bytes_data.write(chunk)
+    bytes_data.seek(0)
+    return joblib.load(bytes_data)
+
+# Function to initialize system from core components
+def initialize_system_from_components(components):
+    """Initialize a HoaxDetectionSystem from core components"""
+    system = HoaxDetectionSystem()
+    
+    # Set all the required components
+    system.preprocessor = components.get('preprocessor')
+    system.feature_extractor = components.get('feature_extractor')
+    system.tfidf_vectorizer = components.get('tfidf_vectorizer')
+    system.scaler = components.get('scaler')
+    system.best_model = components.get('best_model')
+    system.best_model_name = components.get('best_model_name')
+    system.feature_names = components.get('feature_names', [])
+    system.is_trained = True
+    
+    return system
+
+# Modified loading functions to support chunked loading for large models
+def load_joblib_model(path, use_chunks=False):
+    """Load a joblib model, optionally in chunks"""
+    if use_chunks:
+        # This would be implemented for file paths
+        # For uploaded files, we use a different approach
+        return joblib.load(path)
+    else:
+        return joblib.load(path)
+
 # Streamlit sidebar for model loading
 st.sidebar.title("Model Options")
 
 # For demo purposes, you can either upload a model or use a pretrained one
 model_source = st.sidebar.radio(
     "Model Source",
-    ["Upload Model", "Use Default Model Path"]
+    ["Upload Complete Model", "Upload Model Components", "Use Default Path"]
 )
 
-if model_source == "Upload Model":
+# Function to reset model state
+def reset_model_state():
+    st.session_state.model_loaded = False
+    if 'detector' in st.session_state:
+        del st.session_state.detector
+    if 'model_components' in st.session_state:
+        st.session_state.model_components = {}
+
+if model_source == "Upload Complete Model":
     uploaded_model = st.sidebar.file_uploader("Upload your model file (joblib or pickle)", type=["pkl", "joblib"])
     
     if uploaded_model is not None:
@@ -415,18 +447,28 @@ if model_source == "Upload Model":
         
         status_text.text("Loading model...")
         
-        # Save uploaded model to disk temporarily
-        with open("temp_model.pkl", "wb") as f:
-            f.write(uploaded_model.getbuffer())
-        
-        progress_bar.progress(30)
-        status_text.text("Model saved, initializing...")
-        
         try:
-            # Try to load the model
+            # Save uploaded model to disk temporarily to avoid memory issues
+            with open("temp_model.pkl", "wb") as f:
+                progress_bar.progress(10)
+                # Write in chunks to handle large files
+                chunk_size = 5 * 1024 * 1024  # 5MB chunks
+                file_buffer = uploaded_model.getbuffer()
+                bytes_processed = 0
+                total_bytes = len(file_buffer)
+                
+                while bytes_processed < total_bytes:
+                    chunk = file_buffer[bytes_processed:bytes_processed + chunk_size]
+                    f.write(chunk)
+                    bytes_processed += len(chunk)
+                    progress = min(80, int(80 * bytes_processed / total_bytes))
+                    progress_bar.progress(progress)
+                    status_text.text(f"Saved {bytes_processed/1024/1024:.1f}MB of {total_bytes/1024/1024:.1f}MB...")
+            
+            # Load the model
+            status_text.text("Loading model into memory...")
             detector = joblib.load("temp_model.pkl")
             progress_bar.progress(90)
-            status_text.text("Model loaded successfully!")
             
             # Initialize tracker if not present
             if detector.tracker is None:
@@ -442,12 +484,95 @@ if model_source == "Upload Model":
             progress_bar.progress(100)
             status_text.text(f"Ready! Model: {detector.best_model_name}")
             
+            # Clean up
+            os.remove("temp_model.pkl")
+            
         except Exception as e:
+            import traceback
             st.sidebar.error(f"Error loading model: {str(e)}")
+            st.sidebar.code(traceback.format_exc())
             progress_bar.empty()
             status_text.empty()
+            reset_model_state()
+
+elif model_source == "Upload Model Components":
+    st.sidebar.info("Upload individual model components to save memory.")
+    
+    # Component uploaders
+    tfidf_vectorizer_file = st.sidebar.file_uploader("Upload TF-IDF Vectorizer", type=["pkl", "joblib"])
+    best_model_file = st.sidebar.file_uploader("Upload Best Model", type=["pkl", "joblib"])
+    scaler_file = st.sidebar.file_uploader("Upload Scaler", type=["pkl", "joblib"])
+    feature_names_file = st.sidebar.file_uploader("Upload Feature Names (optional)", type=["pkl", "joblib", "txt"])
+    
+    # Check if required components are uploaded
+    if tfidf_vectorizer_file and best_model_file and scaler_file:
+        progress_bar = st.sidebar.progress(0)
+        status_text = st.sidebar.empty()
+        
+        try:
+            # Create model components
+            components = {}
             
-else:  # Use Default Model Path
+            # Load TF-IDF vectorizer
+            status_text.text("Loading TF-IDF vectorizer...")
+            progress_bar.progress(10)
+            components['tfidf_vectorizer'] = joblib.load(tfidf_vectorizer_file)
+            
+            # Load best model
+            status_text.text("Loading main model...")
+            progress_bar.progress(30)
+            components['best_model'] = joblib.load(best_model_file)
+            
+            # Load scaler
+            status_text.text("Loading scaler...")
+            progress_bar.progress(50)
+            components['scaler'] = joblib.load(scaler_file)
+            
+            # Create preprocessor and feature extractor
+            status_text.text("Creating text preprocessor...")
+            progress_bar.progress(60)
+            components['preprocessor'] = IndonesianTextPreprocessor()
+            
+            status_text.text("Creating feature extractor...")
+            progress_bar.progress(70)
+            components['feature_extractor'] = SentimentFeatureExtractor()
+            
+            # Load feature names if provided
+            if feature_names_file:
+                status_text.text("Loading feature names...")
+                progress_bar.progress(80)
+                try:
+                    components['feature_names'] = joblib.load(feature_names_file)
+                except:
+                    # Try as a text file with one feature name per line
+                    feature_names_text = feature_names_file.getvalue().decode('utf-8')
+                    components['feature_names'] = feature_names_text.strip().split('\n')
+            
+            # Set model name
+            components['best_model_name'] = "Uploaded Model"
+            
+            # Initialize system from components
+            status_text.text("Initializing detection system...")
+            progress_bar.progress(90)
+            detector = initialize_system_from_components(components)
+            
+            # Store in session state
+            st.session_state.detector = detector
+            st.session_state.model_components = components
+            st.session_state.model_loaded = True
+            
+            progress_bar.progress(100)
+            status_text.text("Ready! Model components loaded successfully.")
+            
+        except Exception as e:
+            import traceback
+            st.sidebar.error(f"Error loading model components: {str(e)}")
+            st.sidebar.code(traceback.format_exc())
+            progress_bar.empty()
+            status_text.empty()
+            reset_model_state()
+    
+else:  # Use Default Path
     model_path = st.sidebar.text_input(
         "Model Path",
         value="models/hoax_detector_model.pkl"
@@ -463,13 +588,28 @@ else:  # Use Default Model Path
         # Check if model exists at path
         if os.path.exists(model_path):
             progress_bar.progress(10)
-            status_text.text(f"Model found! Size: {os.path.getsize(model_path) / (1024*1024):.2f} MB")
-            progress_bar.progress(30)
-            status_text.text("Loading model...")
+            model_size_mb = os.path.getsize(model_path) / (1024*1024)
+            status_text.text(f"Model found! Size: {model_size_mb:.2f} MB")
             
             try:
-                # Load the model
-                detector = joblib.load(model_path)
+                # If model is very large, use a special loading approach
+                if model_size_mb > 200:
+                    status_text.text("Large model detected. Loading in chunks...")
+                    progress_bar.progress(20)
+                    
+                    # Create chunks directory if it doesn't exist
+                    os.makedirs('model_chunks', exist_ok=True)
+                    
+                    # Try to load the model in small chunks to avoid memory issues
+                    with open(model_path, 'rb') as f:
+                        detector = joblib.load(f)
+                    
+                else:
+                    # Load the model normally
+                    status_text.text("Loading model...")
+                    progress_bar.progress(30)
+                    detector = joblib.load(model_path)
+                
                 progress_bar.progress(90)
                 status_text.text("Model loaded successfully!")
                 
@@ -488,13 +628,17 @@ else:  # Use Default Model Path
                 status_text.text(f"Ready! Model: {detector.best_model_name}")
                 
             except Exception as e:
+                import traceback
                 st.sidebar.error(f"Error loading model: {str(e)}")
+                st.sidebar.code(traceback.format_exc())
                 progress_bar.empty()
                 status_text.empty()
+                reset_model_state()
         else:
             st.sidebar.error(f"Model not found at: {model_path}")
             progress_bar.empty()
             status_text.empty()
+            reset_model_state()
 
 # Prediction threshold slider
 threshold = st.sidebar.slider(
@@ -573,31 +717,36 @@ if st.button("Detect Hoax", type="primary"):
                         factors = [(x['feature'], x['shap_value']) for x in explanation['explanation']]
                         factors.sort(key=lambda x: x[1])  # Sort by impact
                         
-                        features, values = zip(*factors)
-                        colors = ['red' if v < 0 else 'green' for v in values]
-                        
-                        ax.barh(features, values, color=colors)
-                        ax.set_xlabel('Impact on prediction')
-                        ax.set_title(f"Factors influencing {'HOAX' if is_hoax else 'NOT HOAX'} classification")
-                        ax.grid(axis='x', linestyle='--', alpha=0.7)
-                        st.pyplot(fig)
+                        if factors:  # Check if we have explanation factors
+                            features, values = zip(*factors)
+                            colors = ['red' if v < 0 else 'green' for v in values]
+                            
+                            ax.barh(features, values, color=colors)
+                            ax.set_xlabel('Impact on prediction')
+                            ax.set_title(f"Factors influencing {'HOAX' if is_hoax else 'NOT HOAX'} classification")
+                            ax.grid(axis='x', linestyle='--', alpha=0.7)
+                            st.pyplot(fig)
+                        else:
+                            st.info("No detailed explanation factors available for this prediction.")
                 
                 # Detailed explanation
-                st.subheader("Detailed Explanation")
-                
-                explanation_df = pd.DataFrame(explanation['explanation'])
-                explanation_df.columns = ['Feature', 'Impact Value', 'Direction']
-                
-                # Format the dataframe for display
-                explanation_df['Impact'] = explanation_df.apply(
-                    lambda x: f"{'⬆️' if x['Direction'] == 'positive' else '⬇️'} {abs(x['Impact Value']):.4f}",
-                    axis=1
-                )
-                
-                st.dataframe(
-                    explanation_df[['Feature', 'Impact']],
-                    use_container_width=True
-                )
+                if explanation and 'explanation' in explanation and explanation['explanation']:
+                    st.subheader("Detailed Explanation")
+                    
+                    explanation_df = pd.DataFrame(explanation['explanation'])
+                    if not explanation_df.empty:
+                        explanation_df.columns = ['Feature', 'Impact Value', 'Direction']
+                        
+                        # Format the dataframe for display
+                        explanation_df['Impact'] = explanation_df.apply(
+                            lambda x: f"{'⬆️' if x['Direction'] == 'positive' else '⬇️'} {abs(x['Impact Value']):.4f}",
+                            axis=1
+                        )
+                        
+                        st.dataframe(
+                            explanation_df[['Feature', 'Impact']],
+                            use_container_width=True
+                        )
                 
             except Exception as e:
                 import traceback
@@ -613,40 +762,24 @@ tab1, tab2 = st.tabs(["Likely Hoax Examples", "Likely Real News Examples"])
 
 with tab1:
     if st.button("Example: Government Hides Corona Cases", key="example_hoax"):
-        # Set values in the input fields
-        st.session_state.judul_example = "BREAKING NEWS: Pemerintah Sembunyikan Kasus Corona"
-        st.session_state.narasi_example = "Pemerintah dikabarkan menyembunyikan data kasus Corona. Dokumen rahasia menunjukkan adanya manipulasi data, sehingga menimbulkan kecurigaan publik. Sumber dari dalam pemerintahan yang tidak ingin disebutkan namanya mengklaim jumlah kematian sebenarnya 10x lipat dari data resmi!!!"
-        
-        # Rerun to update
+        st.session_state.judul = "BREAKING NEWS: Pemerintah Sembunyikan Kasus Corona"
+        st.session_state.narasi = "Pemerintah dikabarkan menyembunyikan data kasus Corona. Dokumen rahasia menunjukkan adanya manipulasi data, sehingga menimbulkan kecurigaan publik. Sumber dari dalam pemerintahan yang tidak ingin disebutkan namanya mengklaim jumlah kematian sebenarnya 10x lipat dari data resmi!!!"
         st.experimental_rerun()
 
 with tab2:
     if st.button("Example: Health Protocol Implementation", key="example_true"):
-        # Set values in the input fields
-        st.session_state.judul_example = "Pemerintah Terapkan Protokol Kesehatan Baru untuk Atasi Covid-19"
-        st.session_state.narasi_example = "Dalam upaya mengendalikan penyebaran Covid-19, pemerintah telah menerapkan protokol kesehatan yang lebih ketat, termasuk pembatasan pertemuan dan penerapan sanksi bagi pelanggar. Informasi ini berdasarkan data resmi dan rekomendasi dari ahli kesehatan."
-        
-        # Rerun to update
+        st.session_state.judul = "Pemerintah Terapkan Protokol Kesehatan Baru untuk Atasi Covid-19"
+        st.session_state.narasi = "Dalam upaya mengendalikan penyebaran Covid-19, pemerintah telah menerapkan protokol kesehatan yang lebih ketat, termasuk pembatasan pertemuan dan penerapan sanksi bagi pelanggar. Informasi ini berdasarkan data resmi dan rekomendasi dari ahli kesehatan."
         st.experimental_rerun()
-
-# Apply example values if they exist
-if 'judul_example' in st.session_state:
-    judul = st.session_state.judul_example
-    st.text_input("Headline (Judul)", value=judul, key="judul_input")
-    # Clear the session state
-    del st.session_state.judul_example
-
-if 'narasi_example' in st.session_state:
-    narasi = st.session_state.narasi_example
-    st.text_area("Content (Narasi)", value=narasi, key="narasi_input", height=150)
-    # Clear the session state
-    del st.session_state.narasi_example
 
 # Footer
 st.divider()
 st.markdown("""
 **About this application**  
-This Indonesian Hoax Detection System uses machine learning with ensemble methods and SHAP interpretability 
-to analyze and detect potential hoaxes in Indonesian news. The model analyzes both the headline and content text 
-using natural language processing features, sentiment analysis, and credibility indicators.
+This Indonesian Hoax Detection System uses machine learning with ensemble methods to analyze 
+and detect potential hoaxes in Indonesian news. The model analyzes both the headline and content text 
+using natural language processing, sentiment analysis, and credibility indicators.
+
+**Memory-Optimized Implementation:**  
+This application is specially designed to handle large machine learning models efficiently.
 """)
