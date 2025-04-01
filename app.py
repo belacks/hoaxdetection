@@ -825,13 +825,13 @@ with tab1:
     if st.button("Example: Government Hides Corona Cases", key="example_hoax"):
         st.session_state.judul = "BREAKING NEWS: Pemerintah Sembunyikan Kasus Corona"
         st.session_state.narasi = "Pemerintah dikabarkan menyembunyikan data kasus Corona. Dokumen rahasia menunjukkan adanya manipulasi data, sehingga menimbulkan kecurigaan publik. Sumber dari dalam pemerintahan yang tidak ingin disebutkan namanya mengklaim jumlah kematian sebenarnya 10x lipat dari data resmi!!!"
-        st.experimental_rerun()
+        st.rerun()
 
 with tab2:
     if st.button("Example: Health Protocol Implementation", key="example_true"):
         st.session_state.judul = "Pemerintah Terapkan Protokol Kesehatan Baru untuk Atasi Covid-19"
         st.session_state.narasi = "Dalam upaya mengendalikan penyebaran Covid-19, pemerintah telah menerapkan protokol kesehatan yang lebih ketat, termasuk pembatasan pertemuan dan penerapan sanksi bagi pelanggar. Informasi ini berdasarkan data resmi dan rekomendasi dari ahli kesehatan."
-        st.experimental_rerun()
+        st.rerun()
 
 # Footer
 st.divider()
