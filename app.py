@@ -1,4 +1,5 @@
 import os
+import gdown
 import re
 import string
 import time
@@ -410,6 +411,35 @@ def initialize_system_from_components(components):
     
     return system
 
+def load_model_from_gdrive(gdrive_url, output_path="model/hoax_detector_model.pkl"):
+    """Download model from Google Drive if not already present"""
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Check if model already exists
+    if not os.path.exists(output_path):
+        with st.spinner(f"Downloading model from Google Drive... This may take a few minutes."):
+            # Show a progress message
+            progress_text = st.empty()
+            progress_text.text("Starting download...")
+            
+            # Download the file
+            try:
+                gdown.download(gdrive_url, output_path, quiet=False)
+                progress_text.text("Model downloaded successfully!")
+            except Exception as e:
+                st.error(f"Error downloading model: {e}")
+                return None
+    
+    # Load the model
+    try:
+        with st.spinner("Loading model into memory..."):
+            model = joblib.load(output_path)
+            return model
+    except Exception as e:
+        st.error(f"Error loading the downloaded model: {e}")
+        return None
+
 # Modified loading functions to support chunked loading for large models
 def load_joblib_model(path, use_chunks=False):
     """Load a joblib model, optionally in chunks"""
@@ -426,8 +456,38 @@ st.sidebar.title("Model Options")
 # For demo purposes, you can either upload a model or use a pretrained one
 model_source = st.sidebar.radio(
     "Model Source",
-    ["Upload Complete Model", "Upload Model Components", "Use Default Path"]
+    ["Google Drive", "Upload Model", "Upload Model Components", "Use Default Path"]
 )
+
+if model_source == "Google Drive":
+    gdrive_url = st.sidebar.text_input(
+        "Google Drive Link",
+        value="https://drive.google.com/uc?id=MASUKKAN_ID_FILE_ANDA"
+    )
+    
+    if st.sidebar.button("Load Model from Drive"):
+        # Make sure we have a valid Google Drive URL
+        if "drive.google.com" in gdrive_url:
+            # Convert share URL if necessary
+            if "/file/d/" in gdrive_url:
+                file_id = gdrive_url.split("/file/d/")[1].split("/")[0]
+                gdrive_url = f"https://drive.google.com/uc?id={file_id}"
+            
+            # Load model
+            detector = load_model_from_gdrive(gdrive_url)
+            
+            if detector is not None:
+                # Initialize if needed
+                if detector.tracker is None:
+                    detector.tracker = TrainingProgressTracker(verbose=True)
+                
+                # Store in session state
+                st.session_state.detector = detector
+                st.session_state.model_loaded = True
+                
+                st.sidebar.success(f"Model loaded successfully: {detector.best_model_name}")
+        else:
+            st.sidebar.error("Please enter a valid Google Drive URL")
 
 # Function to reset model state
 def reset_model_state():
