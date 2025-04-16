@@ -2,20 +2,18 @@ pandas>=1.3.0
 numpy>=1.20.0
 torch>=1.9.0
 # torchvision torchaudio # Seringkali dibutuhkan oleh torch, tergantung instalasi Anda
-lightgbm>=3.0.0 # Jika Anda memutuskan untuk menggunakannya
+# lightgbm>=3.0.0 # Dikomentari jika tidak jadi dipakai di base model final
 scikit-learn>=1.0.0
 transformers>=4.20.0 # Versi bisa disesuaikan
 datasets>=2.0.0 # Diperlukan oleh transformers Trainer
 imblearn # Untuk imbalanced-learn (RandomUnderSampler)
-# nltk>=3.6.0 # Tidak diperlukan jika hanya pakai regex preprocessor
-# sastrawi>=1.0.1 # Tidak diperlukan jika hanya pakai regex preprocessor
 joblib>=1.0.0
 matplotlib>=3.4.0
 seaborn>=0.11.0
 wordcloud>=1.8.0
 shap>=0.40.0
 streamlit>=1.10.0 # Untuk menjalankan aplikasi Streamlit
-# gdown # Hanya jika Anda ingin fitur download GDrive lagi
+gdown>=4.4.0 # Tambahkan gdown
 
 # Catatan:
 # - Sesuaikan versi jika Anda memerlukan versi spesifik.
