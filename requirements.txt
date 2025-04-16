@@ -1,21 +1,24 @@
-# Core dependencies with pre-built wheels
-streamlit>=1.24.0
-numpy>=1.22.0
-pandas>=1.5.0
-matplotlib>=3.5.0
-seaborn>=0.12.0
-nltk>=3.7.0
-joblib>=1.1.0
+pandas>=1.3.0
+numpy>=1.20.0
+torch>=1.9.0
+# torchvision torchaudio # Seringkali dibutuhkan oleh torch, tergantung instalasi Anda
+lightgbm>=3.0.0 # Jika Anda memutuskan untuk menggunakannya
 scikit-learn>=1.0.0
-shap>=0.41.0
-Sastrawi>=1.0.1
-gdown>=4.7.1
+transformers>=4.20.0 # Versi bisa disesuaikan
+datasets>=2.0.0 # Diperlukan oleh transformers Trainer
+imblearn # Untuk imbalanced-learn (RandomUnderSampler)
+# nltk>=3.6.0 # Tidak diperlukan jika hanya pakai regex preprocessor
+# sastrawi>=1.0.1 # Tidak diperlukan jika hanya pakai regex preprocessor
+joblib>=1.0.0
+matplotlib>=3.4.0
+seaborn>=0.11.0
+wordcloud>=1.8.0
+shap>=0.40.0
+streamlit>=1.10.0 # Untuk menjalankan aplikasi Streamlit
+# gdown # Hanya jika Anda ingin fitur download GDrive lagi
 
-# Model dependencies
-xgboost>=1.7.3
-lightgbm>=3.3.5
-tensorflow>=2.11.0
-scipy>=1.10.0
-
-# Use binary wheels only for packages that need compilation
---only-binary=numpy,scipy,pandas,scikit-learn
+# Catatan:
+# - Sesuaikan versi jika Anda memerlukan versi spesifik.
+# - Pastikan environment Anda (lokal atau Streamlit Cloud) memiliki Python versi yang kompatibel (misal, Python 3.8 - 3.11).
+# - Untuk PyTorch dengan dukungan CUDA, instalasi mungkin perlu perintah khusus dari situs PyTorch.
+#   Versi di atas adalah untuk CPU/CUDA generik.
