@@ -15,10 +15,10 @@ import shutil # Untuk menghapus file zip setelah ekstrak
 # --- Konfigurasi Path & Google Drive ID ---
 
 # Ganti dengan ID File Google Drive Anda!
-GDRIVE_ID_INDOBERT_ZIP = "1xPDhZoEamuIH6-r3kcjAC_FKVXh9UDpe" # ID file final_indobert_model.zip
-GDRIVE_ID_LOGREG_TFIDF = "1KjvwuZ5IbRbeSbxXhSF57qgMs4_G8R3Z" # ID file tfidf_logreg_pipeline_final.joblib
-GDRIVE_ID_MNB_TFIDF = "1KeMmV1zqzxzyihsVBKrQRoLR_gmUgc0S" # ID file tfidf_mnb_pipeline_final.joblib
-GDRIVE_ID_META_MODEL = "1KcnnwygROrnYcbPwE6KcOnztxGmUppwf" # ID file meta_model_final.joblib
+GDRIVE_ID_INDOBERT_ZIP = "1bnpz8SKyQlGKebif04rj3-3X8s9Y8FIO" # ID file final_indobert_model.zip
+GDRIVE_ID_LOGREG_TFIDF = "1bTryplDmvlciPI6b1ZRec-59HCGBHnhG" # ID file tfidf_logreg_pipeline_final.joblib
+GDRIVE_ID_MNB_TFIDF = "1bTrDsw4upe8VqPb0V7-ovrSBFcduhOBd" # ID file tfidf_mnb_pipeline_final.joblib
+GDRIVE_ID_META_MODEL = "1bR_Xb_OT8PLGTxcj4Gypun0InZ1RPBKB" # ID file meta_model_final.joblib
 # GDRIVE_ID_SCALER = "YOUR_SCALER_FILE_ID" # Jika pakai scaler
 
 # Path lokal di environment Streamlit Cloud tempat menyimpan model
