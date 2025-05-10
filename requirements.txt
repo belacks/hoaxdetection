@@ -4,7 +4,7 @@ torch>=1.9.0
 # torchvision torchaudio # Seringkali dibutuhkan oleh torch, tergantung instalasi Anda
 # lightgbm>=3.0.0 # Dikomentari jika tidak jadi dipakai di base model final
 scikit-learn>=1.0.0
-transformers>=4.20.0 # Versi bisa disesuaikan
+transformers>=4.51.1 # Versi bisa disesuaikan
 datasets>=2.0.0 # Diperlukan oleh transformers Trainer
 imblearn # Untuk imbalanced-learn (RandomUnderSampler)
 joblib>=1.0.0
